@@ -4,8 +4,12 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 import com.cshell.model.AggregationSwitch;
 import com.cshell.model.CoreSwitch;
@@ -17,6 +21,12 @@ import com.cshell.model.Switch;
 public class ProjectTest {
 	public Hashtable<String, Switch> switchHashtable;
 	public Hashtable<String, Server> serverHashtable;
+	public Integer[] storedKeys;
+	public int totalHopNumber = 0;
+	public int totalFalsePositiveNumber = 0;
+	
+	public static final int ITEMS_PER_SERVER = 500;
+	public static final int NUMBER_OF_ITEMS = Server.NUM_OF_SERVER * ITEMS_PER_SERVER;
 	
 	private FileReader fReader;
 	private BufferedReader buffReader;
@@ -66,6 +76,193 @@ public class ProjectTest {
 		Server s = serverHashtable.get(ip);
 		return s;
 	}
+	
+	public String getCaptainServerIp(int key) {
+		return Server.getCaptainServerIpByKey(key);
+	}
+	
+	public void generateValuesToLocalAndGlobalIndexInZipfDistribution() {
+		// generate values
+		Hashtable<Integer, Boolean> values = new Hashtable<Integer, Boolean>();
+		int cnt = 0, tmpVal;
+		Boolean flag;
+		while (cnt < NUMBER_OF_ITEMS) {
+			tmpVal = (int)(Math.random() * (Server.RANGE_OF_KEY - 1) );
+			flag = values.get(tmpVal);
+			if (flag == null) {
+				values.put(tmpVal, true);
+				cnt++;
+			}
+		}
+		
+		// put into local index and record big global index
+		
+		// init local index data structure
+		cnt = 0;
+		int serverIdx = 0;
+		String serverIp;
+		Server curServer;
+		Set<Integer> keySet = values.keySet();
+		
+		storedKeys = new Integer[NUMBER_OF_ITEMS];
+		
+		keySet.toArray(storedKeys);
+		
+		converToRandomSequence(storedKeys);
+		
+		serverIp = Server.getCaptainServerIpByServerOrder(serverIdx);
+		curServer = getServerByIp(serverIp);
+		
+		// init big global index data structure
+		int numOfBlocks = Server.RANGE_OF_KEY / Server.GLOBAL_INDEX_KEY_BLOCK_SIZE;
+		BitSet[] bigGlobalIndex = new BitSet[numOfBlocks];
+		for (int i = 0; i < numOfBlocks; i++) {
+			bigGlobalIndex[i] = new BitSet(Server.NUM_OF_SERVER); 
+		}
+		int rowIdx, colIdx;
+		
+		// begin loop
+		int len = storedKeys.length;
+		for (int i = 0; i < len; i++) {
+			int key = storedKeys[i];
+			//System.out.println(key);
+			if (cnt == ITEMS_PER_SERVER) {
+				cnt = 0;
+				serverIdx++;
+				serverIp = Server.getCaptainServerIpByServerOrder(serverIdx);
+				curServer = getServerByIp(serverIp);
+			}
+			curServer.insertValueIntoLocalIndex(key, key);
+			cnt++;
+			
+			rowIdx = key / Server.GLOBAL_INDEX_KEY_BLOCK_SIZE;
+			colIdx = serverIdx;
+			
+			//System.out.println("key: " + key + " rowId: " + rowIdx + " colIdx: " + colIdx);
+			
+			bigGlobalIndex[rowIdx].set(colIdx);
+			//System.out.println("rowIdx: " + rowIdx + " colIdx: " + colIdx + " " + bigGlobalIndex[rowIdx]);
+		}
+		
+		//System.out.println(bigGlobalIndex[0]);
+		
+		// put into global index
+		
+		int blkId;
+		for (int sId = 0; sId < Server.NUM_OF_SERVER; sId++) { // in order to locate server address
+			String sIp = Server.getCaptainServerIpByServerOrder(sId);
+			Server curSev = getServerByIp(sIp);
+			for (int i = 0; i < Server.NUMBER_OF_GLOBAL_BLOCKS; i++) {
+				blkId = sId * Server.NUMBER_OF_GLOBAL_BLOCKS + i;
+				curSev.setGlobalIndexBitSet(i, bigGlobalIndex[blkId]);
+			}
+		}
+		
+		//for (int i = 0; i < bigGlobalIndex.length; i++) {
+		//	System.out.println(bigGlobalIndex[i]);
+		//}
+	}
+	
+	public void generateValuesToLocalAndGlobalIndexInUnionDistribution() {
+		
+		storedKeys = new Integer[NUMBER_OF_ITEMS];
+		
+		// init big global index data structure
+		int numOfBlocks = Server.RANGE_OF_KEY / Server.GLOBAL_INDEX_KEY_BLOCK_SIZE;
+		BitSet[] bigGlobalIndex = new BitSet[numOfBlocks];
+		for (int i = 0; i < numOfBlocks; i++) {
+			bigGlobalIndex[i] = new BitSet(Server.NUM_OF_SERVER); 
+		}
+		int rowIdx, colIdx, key;
+		String serverIp;
+		Server curServer;
+		
+		// generate values
+		// union distribution
+		
+		int x = (int)(Math.random() * (5000 - 1));
+		for (int sIdx = 0; sIdx < Server.NUM_OF_SERVER; sIdx++) {
+			serverIp = Server.getCaptainServerIpByServerOrder(sIdx);
+			curServer = getServerByIp(serverIp);
+			for (int i = 0; i < ITEMS_PER_SERVER; i++) {
+				key = sIdx + (Server.RANGE_OF_KEY / Server.HANDLE_UNIT_OF_SERVER - 1) * i;
+				storedKeys[sIdx*ITEMS_PER_SERVER + i] = key;
+				
+				curServer.insertValueIntoLocalIndex(key, key);
+				rowIdx = key / Server.GLOBAL_INDEX_KEY_BLOCK_SIZE;
+				colIdx = sIdx;
+				
+				//System.out.println("key: " + key + " rowId: " + rowIdx + " colIdx: " + colIdx);
+				
+				bigGlobalIndex[rowIdx].set(colIdx);
+				//System.out.println("rowIdx: " + rowIdx + " colIdx: " + colIdx + " " + bigGlobalIndex[rowIdx]);
+			}
+		}
+		//System.out.println(bigGlobalIndex[0]);
+		
+		// put into global index
+		
+		int blkId;
+		for (int sId = 0; sId < Server.NUM_OF_SERVER; sId++) { // in order to locate server address
+			String sIp = Server.getCaptainServerIpByServerOrder(sId);
+			Server curSev = getServerByIp(sIp);
+			for (int i = 0; i < Server.NUMBER_OF_GLOBAL_BLOCKS; i++) {
+				blkId = sId * Server.NUMBER_OF_GLOBAL_BLOCKS + i;
+				curSev.setGlobalIndexBitSet(i, bigGlobalIndex[blkId]);
+			}
+		}
+		
+		//for (int i = 0; i < bigGlobalIndex.length; i++) {
+		//	System.out.println(bigGlobalIndex[i]);
+		//}
+	}
+	
+	
+	public int findValueOfAKeyFromPossibleServers(int key, List<String> ipList, String campIp) {
+		int outVal = -1;
+		
+		String srcIp = campIp;
+		String destIp = null;
+		
+		int falsePositive = 0;
+		for (String ip : ipList) {
+			destIp = ip;
+			// route the switch
+			
+			List<String> routeIpList;
+			
+			routeIpList = routeThePath(srcIp, destIp);
+			
+			for (String curIp : routeIpList) {
+				System.out.println("routing path----" + curIp);
+			}
+			
+			totalHopNumber += routeIpList.size() - 2; // the routeIpList includes two servers' IPs
+			
+			
+			Server server = getServerByIp(ip);
+			outVal = server.getValueFromLocalIndex(key);
+			if (outVal != -1) break;
+			falsePositive++;
+			srcIp = ip;
+		}
+		
+		totalFalsePositiveNumber += falsePositive;
+		return outVal;
+	}
+	
+	private static Integer[] converToRandomSequence(Integer[] input) {
+        Random random = new Random();
+        int len = input.length;
+        for(int i = 0; i < len; i++){
+            int p = random.nextInt(len - 1);
+            int tmp = input[i];
+            input[i] = input[p];
+            input[p] = tmp;
+        }
+        random = null;
+        return input;
+    }
 	
 	private void readIpConfigurations() throws IOException {
 		readHostIpConfigurations();
@@ -278,21 +475,16 @@ public class ProjectTest {
 	}
 
 	
-	public static void main(String[] args) {
-		System.out.println("Test starts-------------------");
-		ProjectTest pt = new ProjectTest();
-		
-		List<String> ipList;
-		
-		pt.initConfigurations();
-		ipList = pt.routeThePath("10.0.1.2", "10.0.1.3");
-		
-		for (String ip : ipList) {
-			System.out.println(ip);
-		}
-		
-		
-		System.out.println("Test ends-------------------");
-	}
+//	public static void main(String[] args) {
+//		System.out.println("Test starts-------------------");
+//		ProjectTest pt = new ProjectTest();
+//		
+//		pt.initConfigurations();
+//		pt.generateValuesToLocalAndGlobalIndexInUnionDistribution();
+//		
+//		
+//		
+//		System.out.println("Test ends-------------------");
+//	}
 
 }

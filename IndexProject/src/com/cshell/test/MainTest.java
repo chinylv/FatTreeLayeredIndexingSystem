@@ -86,7 +86,7 @@ public class MainTest {
 			System.out.println("Value found: " + pt.findValueOfAKeyFromPossibleServers(searchedKey, potentIpList, campIp));
 		}
 		
-		System.out.println("Total hops: " + pt.totalHopNumber + NUMBER_OF_TEST_CASES);
+		System.out.println("Total hops: " + (pt.totalHopNumber + NUMBER_OF_TEST_CASES));
 		System.out.println("Average hops: " + ((pt.totalHopNumber + 0.0) / (NUMBER_OF_TEST_CASES + 0.0) + 1));
 		
 		System.out.println("Total false positive: " + pt.totalFalsePositiveNumber);
@@ -120,7 +120,7 @@ public class MainTest {
 			System.out.println("Value found: " + pt.findValueOfAKeyFromPossibleServers(searchedKey, potentIpList, campIp));
 		}
 		
-		System.out.println("Total hops: " + pt.totalHopNumber + NUMBER_OF_TEST_CASES); // because of finding the captain
+		System.out.println("Total hops: " + (pt.totalHopNumber + NUMBER_OF_TEST_CASES)); // because of finding the captain
 		System.out.println("Average hops: " + ((pt.totalHopNumber + 0.0) / (NUMBER_OF_TEST_CASES + 0.0) + 1));
 		
 		System.out.println("Total false positive: " + pt.totalFalsePositiveNumber);
@@ -136,7 +136,7 @@ public class MainTest {
 		//mt.testFindingCaptainServerIp();
 		
 		mt.testSearchingKeyValuesInZipfDistribution();
-		// mt.testSearchingKeyValuesInUnionDistribution();
+		//mt.testSearchingKeyValuesInUnionDistribution();
 	}
 
 }
